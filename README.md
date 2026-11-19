@@ -1,6 +1,8 @@
 # Canteen Monitor
 
 Licensed under [MIT](LICENSE). Read [SECURITY.md](SECURITY.md) before deployment.
+Frontend builds include `THIRD_PARTY_LICENSES.txt`; retain it when distributing
+the dashboard. Third-party dependencies retain their own licenses.
 Dashboard data and device administration are localhost-only. Remote collectors
 use authenticated ingestion; network listening does not enable remote data reads.
 The application is not intended for direct public-Internet exposure.

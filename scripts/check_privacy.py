@@ -44,7 +44,7 @@ def main():
             entries = git("ls-tree", "-rz", ref).split(b"\0")
             rows = [(entry.split(b"\t", 1)[1], entry.split(b"\t", 1)[0].split()[2]) for entry in entries if entry]
             emails = git("show", "-s", "--format=%ae%n%ce", ref).decode().splitlines()
-            if any(not email.endswith("@users.noreply.github.com") for email in emails):
+            if any(email != "noreply@github.com" and not email.endswith("@users.noreply.github.com") for email in emails):
                 errors.append(f"{ref[:7]}: personal commit email")
         else:
             entries = git("ls-files", "--stage", "-z").split(b"\0")
