@@ -32,7 +32,73 @@ interfaces. Only AP BSSIDs and broadcast aggregate statistics belong here.
    failure logging and graceful Ctrl+C between scans. Basic manual exact-BSSID
    labeling is available; full geographical mapping remains a later phase.
 
-Each stage is covered by automated tests. The suite currently has 30 tests.
+Each stage is covered by automated tests. The Python suite currently has 35 tests.
+
+## Dashboard (Approved B3 Design)
+
+The local React + TypeScript + ECharts dashboard implements the approved sidebar
+layout with warm ivory, charcoal and rust-orange colors. Real SQLite data is the
+default. The clearly labeled demo switch generates in-memory example data only;
+it never inserts simulated records into SQLite.
+
+Implemented: overview, searchable/filterable AP list, per-BSSID station-count and
+utilization trends, CSV export of the displayed history, read-only region mappings,
+collector configuration, stale/failure/empty states, and mobile layout. The page
+refreshes every 15 seconds while visible; this is separate from the 60-second
+Wi-Fi collection interval. Auto-refresh can be disabled on the Settings page.
+
+The UI never calls an AP count a count of physical access points: visible AP
+metrics are explicitly counted by BSSID. Missing scan points remain null in charts.
+History uses the selected AP's collector and a 2-hour, 24-hour or 7-day window,
+limited to the latest 10,000 scan points per series with a visible truncation note.
+The second series, when available, is another AP seen by the same collector.
+
+Build and run (Node.js required for the build, not for the production server):
+
+```powershell
+cd frontend
+npm.cmd ci
+npm.cmd run build
+cd ..
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m canteen_monitor serve --collect
+```
+
+Open `http://127.0.0.1:8000`. `serve --collect` runs the local API, frontend and
+periodic scanner together. `serve` without `--collect` only reads existing data.
+Do not also run a separate `collect` command with the same collector ID unless
+duplicate scans are intentional. The server binds only to loopback, does not
+publish campus data to the internet and does not install a Windows service.
+It must remain running for collection to continue. Optional `--port 8001` changes
+the server port. A standard source checkout is required for the frontend assets.
+
+For frontend development, start the API on port 8000 and run `npm.cmd run dev`
+in `frontend`; Vite proxies `/api` to the local backend.
+
+Read-only endpoints:
+
+- `GET /api/health`
+- `GET /api/dashboard/summary`
+- `GET /api/aps/{bssid}/history?collector_id=windows_01&hours=24`
+
+Latest readings are selected per collector; identical BSSIDs from different
+collectors are deduplicated using the latest timestamp. A failed latest scan
+does not reuse old observations as current values. Existing observations from
+stale successful scans remain visible but are labeled stale. Registry entries
+remain available even when an AP is absent from the current scan.
+
+Dashboard tests (with the local server running on port 8000 and Edge installed):
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+cd frontend
+npm.cmd run test:e2e
+```
+
+The browser suite exercises mode switching, search/filtering, history export,
+navigation, empty/error states and 1024/768/390px layouts. Screenshots are saved
+in `docs/screenshots`; the `demo` filenames show explicitly simulated UI data.
+These are browser screenshots, not the generated design concepts.
 
 ## Layout
 
@@ -138,10 +204,11 @@ Synthetic data is never imported into the production database.
 
 ## Deferred Scope
 
-FastAPI/authenticated HTTP ingestion, React/ECharts dashboard/history curves,
-CSV mapping import/export, fingerprint rankings, canteen/manual occupancy tables
-and trained occupancy/forecast models are **not implemented**. Browser acceptance
-criteria therefore remain open. No device sum is exposed as a people estimate.
+Authenticated HTTP ingestion, write APIs, CSV mapping import/export,
+fingerprint rankings, canteen/manual occupancy tables
+and trained occupancy/forecast models are **not implemented**. Region mappings and
+configuration are read-only in the browser; existing CLI mapping is retained.
+No device sum is exposed as a people estimate.
 Schema migration tooling will be needed before future incompatible DB changes.
 The current schema creates only the three collection-stage tables. Core parser,
 schema and storage are independent of HTTP or frontend code for later expansion.
