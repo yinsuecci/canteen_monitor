@@ -1,0 +1,24 @@
+接口名称 : WLAN
+当前有 2 个网络可见。
+
+SSID 1 : Campus-Demo
+    BSSID 1 : aa:bb:cc:dd:ee:01
+         信号 : 85%
+         无线电类型 : 802.11ac
+         波段 : 5 GHz
+         频道 : 36
+         BSS 负载:
+             连接的电台: 0
+             频道利用率: 12 (4 %)
+             中可用容量: 30000 (960000 us/s)
+    BSSID 2 : aa:bb:cc:dd:ee:02
+         信号 : 55%
+         波段 : 2.4 GHz
+         频道 : 6
+SSID 2 : Other
+    BSSID 1 : aa:bb:cc:dd:ee:03
+         信号 : 30%
+         频道 : 149
+         Bss Load:
+             Connected Stations: 10
+             Channel Utilization: 13%

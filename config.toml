@@ -1,0 +1,6 @@
+collector_id = "windows_01"
+interval_seconds = 60
+timeout_seconds = 30
+database_path = "data/canteen.sqlite3"
+# Optional label for the scan vantage point, NOT an AP installation location.
+scan_location = ""
