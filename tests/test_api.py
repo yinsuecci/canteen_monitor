@@ -10,6 +10,10 @@ from canteen_monitor.storage import Store
 BSSID = "aa:bb:cc:dd:ee:01"
 
 
+def local_client(app):
+    return TestClient(app, base_url="http://localhost", client=("127.0.0.1", 5000))
+
+
 def insert(store, timestamp, collector="one", count=0, failed=False, absent=False):
     session = store.begin_scan(timestamp, collector, "")
     rows = [] if failed or absent else [Observation(timestamp=timestamp, collector_id=collector, ssid="test", bssid=BSSID, station_count=count)]
@@ -17,7 +21,7 @@ def insert(store, timestamp, collector="one", count=0, failed=False, absent=Fals
 
 
 def test_empty_and_validation(tmp_path):
-    with TestClient(create_app(Config(database_path=tmp_path / "db"))) as client:
+    with local_client(create_app(Config(database_path=tmp_path / "db"))) as client:
         assert client.get('/api/health').json() == {"status": "ok"}
         assert client.get('/api/dashboard/summary').json()['aps'] == []
         assert client.get('/api/aps/bad/history?collector_id=one').status_code == 422
@@ -31,8 +35,8 @@ def test_latest_zero_and_stale(tmp_path):
     store = Store(config.database_path)
     insert(store, datetime.now(UTC)-timedelta(hours=2), count=10)
     insert(store, datetime.now(UTC)-timedelta(hours=1), count=0)
-    with TestClient(create_app(config)) as client:
-        result = client.get('/api/dashboard/summary').json()
+    with local_client(create_app(config)) as client:
+        result = client.get('/api/dashboard/summary?include_local=true').json()
         assert len(result['aps']) == 1
         assert result['aps'][0]['station_count'] == 0
         assert result['aps'][0]['channel_utilization_percent'] is None
@@ -48,8 +52,8 @@ def test_latest_failure_and_history_gaps(tmp_path):
     insert(store, now-timedelta(minutes=3), count=7)
     insert(store, now-timedelta(minutes=2), absent=True)
     insert(store, now-timedelta(minutes=1), failed=True)
-    with TestClient(create_app(config)) as client:
-        result = client.get('/api/dashboard/summary').json()
+    with local_client(create_app(config)) as client:
+        result = client.get('/api/dashboard/summary?include_local=true').json()
         assert result['aps'] == []
         assert result['collectors'][0]['status'] == 'failed'
         points = client.get(f'/api/aps/{BSSID}/history?collector_id=one').json()['points']
@@ -62,8 +66,8 @@ def test_multiple_collectors_deduplicate_and_filter_history(tmp_path):
     store = Store(config.database_path)
     insert(store, datetime.now(UTC)-timedelta(minutes=1), count=5)
     insert(store, datetime.now(UTC), collector="two", count=9)
-    with TestClient(create_app(config)) as client:
-        result = client.get('/api/dashboard/summary').json()
+    with local_client(create_app(config)) as client:
+        result = client.get('/api/dashboard/summary?include_local=true').json()
         assert len(result['collectors']) == 2
         assert len(result['aps']) == 1
         assert result['aps'][0]['station_count'] == 9
@@ -76,6 +80,6 @@ def test_static(tmp_path):
     static = tmp_path / "dist"
     static.mkdir()
     (static / "index.html").write_text("<html>Dashboard</html>", encoding="utf-8")
-    with TestClient(create_app(Config(database_path=tmp_path / "db"), static_dir=static)) as client:
+    with local_client(create_app(Config(database_path=tmp_path / "db"), static_dir=static)) as client:
         assert "Dashboard" in client.get('/').text
         assert client.get('/api/health').json()['status'] == 'ok'

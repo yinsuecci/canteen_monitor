@@ -5,9 +5,26 @@ __pycache__/
 *.egg-info/
 data/
 config.local.toml
+collector-config.local.toml
+*-credentials.json
 frontend/node_modules/
 frontend/dist/
 frontend/test-results/
 
 # Local screenshots can contain live network data.
 docs/screenshots/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.pcap
+*.pcapng

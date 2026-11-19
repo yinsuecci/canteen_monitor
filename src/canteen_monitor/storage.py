@@ -20,6 +20,9 @@ sessions = Table(
     Column("raw_stdout", LargeBinary),
     Column("raw_stderr", LargeBinary),
     Column("decoded_stdout", Text),
+    Column("batch_id", String),
+    Column("payload_hash", String),
+    Column("received_at", String),
 )
 registry = Table(
     "ap_registry", metadata,
@@ -44,11 +47,28 @@ observations = Table(
     Column("ssid", String, nullable=False, index=True),
     Column("bssid", ForeignKey("ap_registry.bssid"), nullable=False, index=True),
     Column("signal", Integer), Column("radio_type", String), Column("band", String),
+    Column("rssi_dbm", Integer),
     Column("channel", Integer), Column("station_count", Integer),
     Column("channel_utilization_raw", Integer),
     Column("channel_utilization_display_percent", Float),
     Column("available_admission_capacity", Integer),
     Index("ix_observations_bssid_timestamp", "bssid", "timestamp"),
+)
+
+devices = Table(
+    "collector_devices", metadata,
+    Column("collector_id", String, primary_key=True),
+    Column("name", String, nullable=False),
+    Column("location", String, nullable=False),
+    Column("source", String, nullable=False),
+    Column("interval_seconds", Integer, nullable=False),
+    Column("token_hash", String, nullable=False, unique=True),
+    Column("enabled", Integer, nullable=False, default=1),
+    Column("created_at", String, nullable=False),
+    Column("last_received_at", String),
+    Column("last_observed_at", String),
+    Column("last_status", String),
+    Column("last_error", Text),
 )
 
 
@@ -70,6 +90,17 @@ class Store:
             connection.execute("PRAGMA journal_mode=WAL")
 
         metadata.create_all(self.engine)
+        # Additive migration: preserve all pre-device collection history.
+        with self.engine.begin() as connection:
+            for table, additions in {
+                "scan_sessions": {"batch_id": "TEXT", "payload_hash": "TEXT", "received_at": "TEXT"},
+                "ap_observations": {"rssi_dbm": "INTEGER"},
+            }.items():
+                columns = {row[1] for row in connection.exec_driver_sql(f"PRAGMA table_info({table})")}
+                for name, datatype in additions.items():
+                    if name not in columns:
+                        connection.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {name} {datatype}")
+            connection.exec_driver_sql("CREATE UNIQUE INDEX IF NOT EXISTS ix_scan_batch ON scan_sessions(collector_id, batch_id)")
 
     def close(self):
         self.engine.dispose()

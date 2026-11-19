@@ -1,0 +1,8 @@
+# Runs on a separate collection device, NOT the dashboard server.
+collector_id = "canteen_probe_01"
+server_url = "https://monitor.example.org"
+token_env = "CANTEEN_DEVICE_TOKEN"
+queue_path = "data/upload-queue.sqlite3"
+interval_seconds = 60
+timeout_seconds = 30
+allow_insecure_http = false

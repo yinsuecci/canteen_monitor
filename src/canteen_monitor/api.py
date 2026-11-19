@@ -1,17 +1,19 @@
-"""Local, read-only dashboard API. No remote collector write surface."""
+"""Dashboard and authenticated remote collector API."""
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event, Thread
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 
 from .collector import run
 from .config import Config
 from .models import normalize_bssid
-from .storage import Store, observations, registry, sessions, utc_iso
+from .storage import Store, devices, observations, registry, sessions, utc_iso
+from .remote import local_access, router
 
 
 def create_app(config: Config, collect: bool = False, static_dir: Path | None = None):
@@ -31,22 +33,51 @@ def create_app(config: Config, collect: bool = False, static_dir: Path | None = 
 
     app = FastAPI(title="Canteen Monitor", lifespan=lifespan)
 
+    @app.middleware("http")
+    async def privacy_boundary(request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/api/") and path not in {"/api/health", "/api/collector/observations"}:
+            try:
+                local_access(request)
+            except HTTPException as exc:
+                return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        if path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    app.include_router(router(store))
+
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
 
     @app.get("/api/dashboard/summary")
-    def summary():
+    def summary(include_local: bool = False):
         now = datetime.now(UTC)
         with store.engine.connect() as conn:
-            latest_ids = select(func.max(sessions.c.id)).group_by(sessions.c.collector_id)
+            ranked = select(sessions.c.id, func.row_number().over(
+                partition_by=sessions.c.collector_id,
+                order_by=(sessions.c.timestamp.desc(), sessions.c.id.desc())
+            ).label("rank"))
+            if not include_local and not collect:
+                ranked = ranked.where(sessions.c.batch_id.is_not(None))
+            ranked = ranked.subquery()
+            latest_ids = select(ranked.c.id).where(ranked.c.rank == 1)
+            registered = {row['collector_id']: row for row in conn.execute(select(devices)).mappings()}
             latest = [dict(row) for row in conn.execute(select(
                 sessions.c.id, sessions.c.timestamp, sessions.c.collector_id,
                 sessions.c.status, sessions.c.error, sessions.c.scan_location,
+                sessions.c.received_at, sessions.c.source,
             ).where(sessions.c.id.in_(latest_ids))).mappings()]
             for row in latest:
                 age = (now - datetime.fromisoformat(row["timestamp"])).total_seconds()
-                row["fresh"] = age <= max(config.interval_seconds * 3, config.timeout_seconds + 60)
+                device = registered.get(row["collector_id"])
+                row["interval_seconds"] = device["interval_seconds"] if device else config.interval_seconds
+                row["fresh"] = age <= max(row["interval_seconds"] * 3, config.timeout_seconds + 60) and bool(device["enabled"] if device else True)
             ids = [row["id"] for row in latest if row["status"] == "success"]
             current = [dict(row) for row in conn.execute(select(
                 observations, registry.c.location_name, registry.c.confirmed,

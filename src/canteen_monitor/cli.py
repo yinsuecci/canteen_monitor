@@ -16,6 +16,7 @@ def main() -> int:
     commands.add_parser("collect", help="Serial scans until Ctrl+C")
     serve = commands.add_parser("serve", help="Local dashboard and read-only API")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--host", default="127.0.0.1", help="Use 0.0.0.0 only on an authorized private network or behind HTTPS")
     serve.add_argument("--collect", action="store_true", help="Also run periodic scans")
     history = commands.add_parser("history", help="Latest observations as JSON, UTC timestamps")
     history.add_argument("--bssid")
@@ -40,7 +41,7 @@ def main() -> int:
         if args.command == "serve":
             import uvicorn
             from .api import create_app
-            uvicorn.run(create_app(config, collect=args.collect), host="127.0.0.1", port=args.port)
+            uvicorn.run(create_app(config, collect=args.collect), host=args.host, port=args.port, proxy_headers=False)
             return 0
         store = Store(config.database_path)
         if args.command == "scan":

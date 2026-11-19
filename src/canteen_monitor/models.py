@@ -15,6 +15,7 @@ class Observation(BaseModel):
     ssid: str
     bssid: str
     signal: int | None = Field(default=None, ge=0, le=100)
+    rssi_dbm: int | None = Field(default=None, ge=-127, le=20)
     radio_type: str | None = None
     band: str | None = None
     channel: int | None = Field(default=None, ge=1, le=233)

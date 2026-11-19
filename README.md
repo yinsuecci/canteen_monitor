@@ -1,7 +1,35 @@
 # Canteen Monitor
 
+Licensed under [MIT](LICENSE). Read [SECURITY.md](SECURITY.md) before deployment.
+Dashboard data and device administration are localhost-only. Remote collectors
+use authenticated ingestion; network listening does not enable remote data reads.
+The application is not intended for direct public-Internet exposure.
+
 Windows-first collection of public aggregate Wi-Fi BSS Load broadcasts.
 Station Count means associated wireless terminals, **not people**.
+
+## Remote Device Mode (Current Default)
+
+The server receives scans from independent devices. It does not scan on the
+dashboard computer unless `--collect` is explicitly requested for debugging.
+Device onboarding, sample locations, online/offline and data-freshness states,
+key rotation and disabling are available at `/#devices`. New tokens are shown
+once. Previous scan history is retained; Settings can include local history
+without starting local scans.
+
+```powershell
+.\.venv\Scripts\python.exe -m canteen_monitor serve --host 0.0.0.0
+```
+
+This listens on the authorized local network. Manage devices through
+`http://127.0.0.1:8000/#devices` on the server; devices upload to the server's
+reachable LAN address. No firewall rules, public DNS or HTTPS certificates are
+automatically configured. Public deployments require HTTPS and access controls.
+
+Full protocol, deployment boundaries and durable upload-client instructions:
+[Remote Collectors](docs/remote-collectors.md). The Python uploader runs on an
+independent Windows collector, or uploads JSON from another sensor. ESP32-C5
+firmware and physical hardware verification are a separate remaining step.
 
 ## Setup
 
@@ -32,7 +60,8 @@ interfaces. Only AP BSSIDs and broadcast aggregate statistics belong here.
    failure logging and graceful Ctrl+C between scans. Basic manual exact-BSSID
    labeling is available; full geographical mapping remains a later phase.
 
-Each stage is covered by automated tests. The Python suite currently has 35 tests.
+Each stage is covered by automated tests, including remote ingestion and a real
+HTTP test with a separate temporary server process and isolated database.
 
 ## Dashboard (Approved B3 Design)
 
@@ -61,13 +90,14 @@ npm.cmd ci
 npm.cmd run build
 cd ..
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m canteen_monitor serve --collect
+.\.venv\Scripts\python.exe -m canteen_monitor serve
 ```
 
-Open `http://127.0.0.1:8000`. `serve --collect` runs the local API, frontend and
-periodic scanner together. `serve` without `--collect` only reads existing data.
+Open `http://127.0.0.1:8000`. `serve` runs the API, remote receiver and frontend.
+`serve --collect` explicitly enables the local scanner for debugging only.
 Do not also run a separate `collect` command with the same collector ID unless
-duplicate scans are intentional. The server binds only to loopback, does not
+duplicate scans are intentional. The server defaults to loopback; use `--host
+0.0.0.0` for LAN access. It does not
 publish campus data to the internet and does not install a Windows service.
 It must remain running for collection to continue. Optional `--port 8001` changes
 the server port. A standard source checkout is required for the frontend assets.
@@ -75,11 +105,16 @@ the server port. A standard source checkout is required for the frontend assets.
 For frontend development, start the API on port 8000 and run `npm.cmd run dev`
 in `frontend`; Vite proxies `/api` to the local backend.
 
-Read-only endpoints:
+Dashboard endpoints:
 
 - `GET /api/health`
 - `GET /api/dashboard/summary`
 - `GET /api/aps/{bssid}/history?collector_id=windows_01&hours=24`
+- `GET /api/devices`
+- `POST /api/devices` (server-local administration)
+- `PUT /api/devices/{collector_id}` (server-local administration)
+- `POST /api/devices/{collector_id}/rotate-key` (server-local administration)
+- `POST /api/collector/observations` (authenticated device upload)
 
 Latest readings are selected per collector; identical BSSIDs from different
 collectors are deduplicated using the latest timestamp. A failed latest scan
@@ -204,10 +239,10 @@ Synthetic data is never imported into the production database.
 
 ## Deferred Scope
 
-Authenticated HTTP ingestion, write APIs, CSV mapping import/export,
+AP mapping write APIs, CSV mapping import/export,
 fingerprint rankings, canteen/manual occupancy tables
 and trained occupancy/forecast models are **not implemented**. Region mappings and
-configuration are read-only in the browser; existing CLI mapping is retained.
+local scanner configuration are read-only in the browser; existing CLI mapping is retained.
 No device sum is exposed as a people estimate.
 Schema migration tooling will be needed before future incompatible DB changes.
 The current schema creates only the three collection-stage tables. Core parser,
