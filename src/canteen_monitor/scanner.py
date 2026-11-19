@@ -13,7 +13,10 @@ class ScanResult:
     error: str | None = None
 
 
-def decode_output(data: bytes) -> str:
+def decode_output(data: bytes, encoding: str | None = None) -> str:
+    # Imported samples need an explicit encoding; single-byte OEM pages are ambiguous.
+    if encoding is not None:
+        return data.decode(encoding)
     if data.startswith((b"\xff\xfe", b"\xfe\xff")):
         return data.decode("utf-16")
     encodings = ["utf-8-sig"]

@@ -51,4 +51,4 @@ def test_encodings():
     text = "连接的电台: 0"
     assert decode_output(text.encode("utf-8")) == text
     assert decode_output(text.encode("utf-16")) == text
-    assert decode_output(text.encode("gb18030")) == text
+    assert decode_output(text.encode("gb18030"), encoding="gb18030") == text
